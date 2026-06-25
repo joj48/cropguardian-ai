@@ -1,0 +1,8 @@
+venv/
+__pycache__/
+*.pyc
+.vscode/
+graphify-out/
+.env
+data/train/
+temp_*
