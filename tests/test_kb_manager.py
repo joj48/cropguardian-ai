@@ -16,7 +16,12 @@ def mock_config():
 def mock_tomato_data():
     return [
         {
-            "metadata": {"review_status": "approved"},
+            "metadata": {
+                "review_status": "approved",
+                "last_scientific_review": "2026-06-26",
+                "content_quality": "High",
+                "difficulty_level": "Intermediate"
+            },
             "disease_id": "TOM-001",
             "disease_name": "Tomato Late Blight",
             "common_name": "Late Blight",
@@ -28,30 +33,126 @@ def mock_tomato_data():
                 "cnn_class": "Tomato___Late_blight",
                 "aliases": ["late blight"]
             },
-            "overview": "A devastating disease of tomatoes.",
-            "symptoms": ["Dark lesions on leaves"],
-            "causes": ["High humidity", "Cool temperatures"],
-            "infection_cycle": ["Spores germinate in water"],
-            "transmission": ["Wind", "Water splash"],
-            "risk_factors": ["Poor air circulation"],
-            "environmental_conditions": ["Cool and wet"],
-            "weather_thresholds": {"humidity": "> 90%"},
-            "weather_influence": "Thrives in cool, wet weather.",
-            "severity_levels": {"High": "Complete defoliation"},
-            "severity_score": 9,
-            "immediate_actions": ["Apply fungicide"],
-            "treatment": ["Copper-based fungicides"],
-            "prevention": ["Crop rotation", "Resistant varieties"],
-            "nutrient_management": ["Avoid excess nitrogen"],
-            "disease_progression": "Rapid",
+            "overview": {
+                "description": "A devastating disease of tomatoes.",
+                "importance": "High",
+                "affected_parts": ["leaves"],
+                "host_plants": ["Tomato"]
+            },
+            "symptoms": {
+                "early": ["Dark lesions on leaves"],
+                "moderate": [],
+                "severe": [],
+                "leaf": [],
+                "stem": [],
+                "fruit": [],
+                "root": []
+            },
+            "causes": {
+                "primary_cause": "Phytophthora infestans",
+                "pathogen": "Oomycete",
+                "survival_mechanism": "spores",
+                "infection_process": "germination"
+            },
+            "infection_cycle": {
+                "stages": ["Spores germinate in water"],
+                "spread_cycle": "Polycyclic"
+            },
+            "transmission": {
+                "methods": ["Wind", "Water splash"],
+                "vectors": [],
+                "common_sources": ["Soil"]
+            },
+            "risk_factors": {
+                "humidity": "High"
+            },
+            "environmental_conditions": {
+                "temperature": {"optimal_range": "15-20C", "notes": "cool"},
+                "humidity": {"optimal_range": ">90%", "notes": "wet"},
+                "rainfall": "moderate",
+                "wind": "gentle",
+                "soil_conditions": "wet"
+            },
+            "weather_thresholds": {
+                "humidity": 90
+            },
+            "weather_influence": {
+                "high_humidity": "Thrives in cool, wet weather."
+            },
+            "severity_levels": {
+                "low": "First spots",
+                "medium": "Spreading",
+                "high": "Complete defoliation",
+                "critical": "Ruined"
+            },
+            "severity_score": {
+                "low": 1,
+                "medium": 2,
+                "high": 3,
+                "critical": 4
+            },
+            "immediate_actions": {
+                "today": ["Apply fungicide"],
+                "within_24_hours": [],
+                "within_one_week": []
+            },
+            "treatment": {
+                "chemical": ["Copper-based fungicides"],
+                "biological": [],
+                "organic": [],
+                "integrated_management": []
+            },
+            "prevention": {
+                "farm_hygiene": [],
+                "irrigation": [],
+                "crop_rotation": ["Crop rotation"],
+                "air_circulation": [],
+                "resistant_varieties": ["Resistant varieties"],
+                "seasonal_practices": []
+            },
+            "nutrient_management": {
+                "nitrogen": "Avoid excess nitrogen",
+                "phosphorus": "standard",
+                "potassium": "standard",
+                "calcium": "standard",
+                "magnesium": "standard",
+                "micronutrients": []
+            },
+            "disease_progression": {
+                "untreated": ["Rapid"],
+                "treated": ["Controlled"]
+            },
             "recovery_indicators": ["New healthy growth"],
-            "recovery": "Possible if caught early.",
-            "economic_impact": "Severe",
-            "monitoring": ["Check lower leaves frequently"],
-            "faq": [{"question": "Is it safe to eat?", "answer": "Yes, if unaffected."}],
-            "educational_information": "First identified in 1840s.",
-            "ai_context": {"summary": "Late blight"},
-            "prompt_templates": {"default": "Advise on late blight"},
+            "recovery": {
+                "estimated_days": "14",
+                "success_rate": "high",
+                "depends_on": ["weather"]
+            },
+            "economic_impact": {
+                "yield_loss": "Severe",
+                "quality_loss": "High",
+                "financial_impact": "High"
+            },
+            "monitoring": {
+                "inspection_frequency": "weekly",
+                "warning_signs": ["Check lower leaves frequently"],
+                "recovery_signs": []
+            },
+            "faq": [
+                {"question": "Is it safe to eat?", "answer": "Yes, if unaffected."}
+            ],
+            "educational_information": {
+                "interesting_facts": ["First identified in 1840s."],
+                "similar_diseases": [],
+                "differential_diagnosis": [],
+                "long_term_management": []
+            },
+            "ai_context": {
+                "summary": "Late blight"
+            },
+            "prompt_templates": {
+                "default": "Advise on late blight"
+            },
             "references": ["Ag Ext 101"]
         }
     ]

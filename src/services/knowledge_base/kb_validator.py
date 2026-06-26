@@ -23,17 +23,42 @@ class KnowledgeBaseValidator:
     @staticmethod
     def validate_crop_data(crop_name: str, records: List[Dict[str, Any]]):
         """Validates loaded crop data against the expected schema."""
-        if not validate_record:
-            logger.warning("Validation skipped because validator script is unavailable.")
-            return
-            
+        from pydantic import ValidationError as PydanticValidationError
+        from .models import DiseaseRecord
+
         errors = []
+        file_name = f"{crop_name.lower().replace(' ', '_')}.json"
+
         for index, record in enumerate(records):
-            issues = validate_record(record, f"{crop_name}.json", index)
-            if issues:
-                errors.extend([f"Record {index}: {issue}" for issue in issues])
+            # 1. Run legacy JSON checks if available
+            if validate_record:
+                issues = validate_record(record, file_name, index)
+                if issues:
+                    for issue in issues:
+                        log_msg = f"Legacy Validation Issue in {file_name} | Record {index} | {issue}"
+                        logger.error(log_msg)
+                        errors.append(log_msg)
+
+            # 2. Run canonical Pydantic model validation
+            try:
+                DiseaseRecord(**record)
+            except PydanticValidationError as e:
+                disease_id = record.get("disease_id", "Unknown ID")
+                cnn_class = record.get("model_mapping", {}).get("cnn_class", "Unknown Class")
                 
+                for error in e.errors():
+                    field_name = " -> ".join(str(loc) for loc in error["loc"])
+                    msg = error["msg"]
+                    log_msg = (
+                        f"Validation Failure in {file_name} | "
+                        f"Disease ID: {disease_id} | "
+                        f"CNN Class: {cnn_class} | "
+                        f"Field: {field_name} | "
+                        f"Error: {msg}"
+                    )
+                    logger.error(log_msg)
+                    errors.append(log_msg)
+
         if errors:
-            err_msg = f"Validation failed for {crop_name}.json: {errors}"
-            logger.error(err_msg)
+            err_msg = f"Validation failed for {file_name}: {len(errors)} issues found."
             raise ValidationError(err_msg)

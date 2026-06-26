@@ -7,6 +7,7 @@ from .models import DiseaseRecord
 from .kb_loader import KnowledgeBaseLoader
 from .kb_cache import KnowledgeBaseCache
 from .kb_validator import KnowledgeBaseValidator
+from .class_mapper import ClassMapper, ResolutionResult
 
 logger = get_logger("knowledge_base", "knowledge_base.log")
 
@@ -20,6 +21,7 @@ class KnowledgeBaseManager:
         self.cache = KnowledgeBaseCache()
         self.validator = KnowledgeBaseValidator()
         self.config = {}
+        self.class_mapper = None
         
         self.initialize(validate_on_startup)
 
@@ -31,6 +33,10 @@ class KnowledgeBaseManager:
             
             self.config = self.loader.load_config()
             self._warm_cache(validate_on_startup)
+            
+            # Initialize ClassMapper with the list of warmed canonical classes
+            canonical_classes = list(self.cache._disease_index.keys())
+            self.class_mapper = ClassMapper(canonical_classes)
             
             t1 = time.time()
             logger.info(f"KnowledgeBaseManager initialized in {(t1 - t0) * 1000:.2f}ms")
@@ -68,28 +74,63 @@ class KnowledgeBaseManager:
                 
         # Cache the parsed models (builds the O(1) index)
         self.cache.set_crop(crop_name, records)
+        # Update ClassMapper's canonical class lists if initialized
+        if self.class_mapper:
+            self.class_mapper.canonical_classes = list(self.cache._disease_index.keys())
+            self.class_mapper._canonical_lower_map = {c.lower(): c for c in self.class_mapper.canonical_classes}
         return records
 
     def get_disease(self, cnn_class: str) -> DiseaseRecord:
         """
         Retrieves a disease record by its cnn_class.
-        Utilizes the O(1) cache index.
+        Utilizes the O(1) cache index after resolving via ClassMapper.
         """
-        record = self.cache.get_disease(cnn_class)
+        raw_class = cnn_class
+        canonical_class = raw_class
+        resolution_type = "NOT_FOUND"
+        status = "FAILED"
+        disease_id = None
+
+        if self.class_mapper:
+            res = self.class_mapper.resolve(raw_class)
+            resolution_type = res.resolution_type
+            if res.canonical_class:
+                canonical_class = res.canonical_class
+        else:
+            logger.warning("ClassMapper not initialized. Attempting direct lookup.")
+
+        record = self.cache.get_disease(canonical_class)
         if record:
-            return record
-            
-        # If not found in cache, it might be a lazy-loaded crop or invalid
-        # To be safe, we can try to extract the crop name from the cnn_class
-        crop_name = cnn_class.split('___')[0] if '___' in cnn_class else cnn_class
-        # Load the specific crop
-        self._load_and_cache_crop(crop_name)
-        
-        # Check again
-        record = self.cache.get_disease(cnn_class)
+            status = "SUCCESS"
+            disease_id = record.disease_id
+        else:
+            # Try to lazy-load the crop
+            crop_name = canonical_class.split('___')[0] if '___' in canonical_class else canonical_class
+            try:
+                self._load_and_cache_crop(crop_name)
+                record = self.cache.get_disease(canonical_class)
+                if record:
+                    status = "SUCCESS"
+                    disease_id = record.disease_id
+            except Exception as e:
+                logger.error(f"Lazy load failed for crop {crop_name}: {e}")
+
+        # Improved validation and resolution logging trace
+        log_block = (
+            f"\nRaw CNN Class: {raw_class}\n"
+            f"Resolution: {resolution_type}\n"
+            f"Canonical KB Class: {canonical_class}\n"
+            f"Lookup Result: {status}\n"
+            f"Disease ID: {disease_id}"
+        )
+        logger.info(log_block)
+
         if not record:
-            raise DiseaseNotFound(f"Disease with cnn_class '{cnn_class}' not found in the Knowledge Base.")
-            
+            raise DiseaseNotFound(
+                f"Disease with cnn_class '{canonical_class}' (resolved from '{raw_class}') "
+                f"not found in the Knowledge Base."
+            )
+
         return record
 
     def get_crop(self, crop_name: str) -> List[DiseaseRecord]:

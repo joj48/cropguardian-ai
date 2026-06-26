@@ -17,8 +17,13 @@ class TestAdvisoryAgent(unittest.TestCase):
     @patch('os.getenv', return_value=None)
     def test_fallback_logic(self, mock_getenv):
         """Test the fallback logic when no API key is provided."""
+        from src.services.knowledge_base.models import AdvisoryContext
         agent = AdvisoryAgent()
-        result = agent.generate_advice("Tomato___Late_blight", "High")
+        context = AdvisoryContext(
+            disease_data={"disease": "Tomato___Late_blight", "confidence": 95.0},
+            severity_data={"severity": "High"}
+        )
+        result = agent.generate_advice(context)
         
         self.assertEqual(result["source"], "Fallback Knowledge Base")
         self.assertIn("treatment", result)
@@ -26,8 +31,13 @@ class TestAdvisoryAgent(unittest.TestCase):
 
     def test_healthy_class(self):
         """Test that healthy class bypasses API entirely and returns positive advice."""
+        from src.services.knowledge_base.models import AdvisoryContext
         agent = AdvisoryAgent()
-        result = agent.generate_advice("Tomato___healthy", "None")
+        context = AdvisoryContext(
+            disease_data={"disease": "Tomato___healthy", "confidence": 100.0},
+            severity_data={"severity": "None"}
+        )
+        result = agent.generate_advice(context)
         
         self.assertEqual(result["source"], "Fallback Knowledge Base")
         self.assertEqual(result["treatment"], [])
@@ -37,6 +47,7 @@ class TestAdvisoryAgent(unittest.TestCase):
     @patch('agents.advisory_agent.advisory_agent.genai')
     def test_gemini_mocked_call(self, mock_genai, mock_getenv):
         """Test Gemini API call structure using mocks."""
+        from src.services.knowledge_base.models import AdvisoryContext
         
         # Setup mock client
         mock_client = MagicMock()
@@ -61,7 +72,11 @@ class TestAdvisoryAgent(unittest.TestCase):
         agent = AdvisoryAgent()
         
         # Execute
-        result = agent.generate_advice("Tomato___Late_blight", "Medium")
+        context = AdvisoryContext(
+            disease_data={"disease": "Tomato___Late_blight", "confidence": 85.0},
+            severity_data={"severity": "Medium"}
+        )
+        result = agent.generate_advice(context)
         
         # Assertions
         self.assertEqual(result["source"], "Gemini 2.5 Flash")

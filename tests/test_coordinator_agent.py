@@ -16,10 +16,10 @@ class TestCoordinatorAgent(unittest.TestCase):
         """Test handling of an invalid image path."""
         result = self.agent.process_image("non_existent_image_123.jpg")
         
-        self.assertEqual(result["status"], "error")
-        self.assertTrue(len(result["warnings"]) > 0)
-        self.assertIn("Image not found", result["warnings"][0])
-        self.assertEqual(result["agent_trace"], [])
+        self.assertEqual(result["diagnostics"]["status"], "error")
+        self.assertTrue(len(result["diagnostics"]["warnings"]) > 0)
+        self.assertIn("Image not found", result["diagnostics"]["warnings"][0])
+        self.assertEqual(result["diagnostics"]["agent_trace"], [])
         
     @patch('agents.disease_detection_agent.disease_detection_agent.DiseaseDetectionAgent.predict')
     @patch('agents.severity_agent.severity_agent.SeverityAgent.analyze_severity')
@@ -31,7 +31,9 @@ class TestCoordinatorAgent(unittest.TestCase):
         mock_disease.return_value = {
             "disease": "Tomato___Late_blight",
             "confidence": 95.0,
-            "confidence_level": "High"
+            "confidence_level": "High",
+            "model_version": "v1",
+            "timestamp": "2026-06-26"
         }
         
         mock_severity.return_value = {
@@ -47,13 +49,13 @@ class TestCoordinatorAgent(unittest.TestCase):
         
         result = self.agent.process_image("dummy_path.jpg")
         
-        self.assertEqual(result["status"], "success")
-        self.assertEqual(result["agent_trace"], ["DiseaseDetectionAgent", "SeverityAgent", "AdvisoryAgent"])
-        self.assertEqual(result["warnings"], [])
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        self.assertEqual(result["diagnostics"]["agent_trace"], ["DiseaseDetectionAgent", "SeverityAgent", "AdvisoryAgent"])
+        self.assertEqual(result["diagnostics"]["warnings"], [])
         self.assertEqual(result["prediction"]["disease"], "Tomato___Late_blight")
-        self.assertEqual(result["severity"]["severity"], "High")
-        self.assertEqual(result["advice"]["source"], "Mocked")
-        self.assertTrue(result["execution_time_ms"] >= 0)
+        self.assertEqual(result["environment"]["severity"]["severity"], "High")
+        self.assertEqual(result["ai"]["advice"]["source"], "Mocked")
+        self.assertTrue(result["diagnostics"]["execution_time_ms"] >= 0)
 
     @patch('agents.disease_detection_agent.disease_detection_agent.DiseaseDetectionAgent.predict')
     @patch('agents.severity_agent.severity_agent.SeverityAgent.analyze_severity')
@@ -64,7 +66,10 @@ class TestCoordinatorAgent(unittest.TestCase):
         
         mock_disease.return_value = {
             "disease": "Tomato___Late_blight",
-            "confidence": 95.0
+            "confidence": 95.0,
+            "confidence_level": "High",
+            "model_version": "v1",
+            "timestamp": "2026-06-26"
         }
         mock_severity.return_value = {
             "severity": "High"
@@ -74,11 +79,11 @@ class TestCoordinatorAgent(unittest.TestCase):
         
         result = self.agent.process_image("dummy_path.jpg")
         
-        self.assertEqual(result["status"], "partial_success")
-        self.assertEqual(result["agent_trace"], ["DiseaseDetectionAgent", "SeverityAgent"])
-        self.assertEqual(len(result["warnings"]), 1)
-        self.assertIn("Advisory generation failed", result["warnings"][0])
-        self.assertIsNone(result["advice"])
+        self.assertEqual(result["diagnostics"]["status"], "partial_success")
+        self.assertEqual(result["diagnostics"]["agent_trace"], ["DiseaseDetectionAgent", "SeverityAgent"])
+        self.assertEqual(len(result["diagnostics"]["warnings"]), 1)
+        self.assertIn("Advisory generation failed", result["diagnostics"]["warnings"][0])
+        self.assertIsNone(result["ai"]["advice"])
 
 if __name__ == "__main__":
     unittest.main()

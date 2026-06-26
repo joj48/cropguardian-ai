@@ -30,6 +30,9 @@ from src.utils.logger import (
 ui_logger = get_logger("ui", "uploaded_images.log")
 
 # ─── UI Helpers ──────────────────────────────────────────────────────────────
+import importlib
+import ui_components
+importlib.reload(ui_components)
 from ui_components import (
     inject_css,
     render_badge,
@@ -38,6 +41,9 @@ from ui_components import (
     render_callout,
     format_disease_name,
     is_healthy,
+    render_prediction_summary,
+    render_ai_advisory,
+    KnowledgeBasePresentationEngine
 )
 
 # ─── Page Config ─────────────────────────────────────────────────────────────
@@ -297,11 +303,25 @@ if "pipeline_response" not in st.session_state:
     st.stop()
 
 response      = st.session_state["pipeline_response"]
-result        = response.get("prediction", {})
-severity_res  = response.get("severity", {}) or {}
-advice_res    = response.get("advice", {})   or {}
-weather_data  = response.get("weather")
-risk_data     = response.get("environmental_risk")
+
+# ── Extract from grouped schema; fall back to legacy flat keys gracefully ──
+result        = response.get("prediction") or response.get("result") or {}
+_env          = response.get("environment") or {}
+_knowledge    = response.get("knowledge") or {}
+_ai           = response.get("ai") or {}
+_diag         = response.get("diagnostics") or response  # flat fallback
+
+# Knowledge context — full DiseaseRecord dict (new schema) or None
+knowledge_ctx = _knowledge.get("context") or None
+
+# AI advisory — Gemini-generated advice
+advice_res    = _ai.get("advice") or response.get("advice") or {}
+
+# Environment
+weather_data  = _env.get("weather") or response.get("weather")
+risk_data     = _env.get("risk") or response.get("environmental_risk")
+severity_res  = _env.get("severity") or response.get("severity") or {}
+
 temp_img_path = st.session_state.get("uploaded_img_path", "")
 
 # Derived values
@@ -373,6 +393,13 @@ with st.container(border=True):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# ① b  PREDICTION SUMMARY PANEL — pipeline status at a glance
+# ═══════════════════════════════════════════════════════════════════════════════
+render_prediction_summary(response)
+
+st.markdown("")
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # ② ENVIRONMENTAL INTELLIGENCE + TOP PREDICTIONS
 # ═══════════════════════════════════════════════════════════════════════════════
 env_col, pred_col = st.columns(2, gap="large")
@@ -440,47 +467,32 @@ if risk_data and "error" not in risk_data:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# ④ GEMINI ADVISORY — Tabs
+# ④ KNOWLEDGE BASE — Full structured scientific information
 # ═══════════════════════════════════════════════════════════════════════════════
-if advice_res:
+if knowledge_ctx:
+    render_section_label("Disease Knowledge Base")
+    KnowledgeBasePresentationEngine.render(knowledge_ctx)
+elif advice_res:
+    # Legacy fallback: no KB available — render advisory via engine (graceful degradation)
     render_section_label("AI Advisory")
+    KnowledgeBasePresentationEngine.render(advice_res)
 
-    # Immediate action + weather warning — always above the tabs
-    immediate = advice_res.get("immediate_actions", "")
-    if immediate and immediate.lower() not in ("none required.", "none required", "none", ""):
-        render_callout(f"<strong>Immediate Action Required:</strong> {immediate}", kind="action")
 
-    weather_warn = advice_res.get("weather_based_warnings", "")
-    if weather_warn and weather_warn.lower() not in ("none.", "none", ""):
-        render_callout(f"<strong>Weather Advisory:</strong> {weather_warn}", kind="warning")
+# ═══════════════════════════════════════════════════════════════════════════════
+# ⑤ PERSONALIZED AI ADVISORY — Gemini recommendations (separate from KB)
+# ═══════════════════════════════════════════════════════════════════════════════
+if advice_res and knowledge_ctx:
+    st.markdown("")
+    render_section_label("🤖 Personalized AI Advisory")
+    render_ai_advisory(advice_res)
 
-    # Tabbed advisory cards
-    tab_overview, tab_treatment, tab_prevention, tab_fertilizer = st.tabs(
-        ["📋 Overview", "💊 Treatment", "🛡 Prevention", "🌱 Fertilizer"]
-    )
-
-    with tab_overview:
-        st.markdown(advice_res.get("disease_description", ""))
-        if severity_res.get("details"):
-            st.markdown("")
-            with st.container(border=True):
-                st.markdown(f"**⚠️ Severity Assessment** — `{severity}`")
-                st.markdown(severity_res.get("details", ""))
-                st.caption(f"Assessment method: {severity_res.get('assessment_method','—')}")
-        st.caption(f"Advisory source: {advice_res.get('source','Unknown')}")
-
-    with tab_treatment:
-        render_advisory_list(advice_res.get("treatment", []))
-
-    with tab_prevention:
-        render_advisory_list(advice_res.get("prevention", []))
-
-    with tab_fertilizer:
-        render_advisory_list(advice_res.get("fertilizer_recommendations", []))
-
-    expert = advice_res.get("expert_consultation", "")
-    if expert and expert.lower() not in ("not necessary at this time.", "not necessary at this time", ""):
-        st.caption(f"🧑‍🔬 Expert consultation: {expert}")
+# Severity details (if available)
+if severity_res and severity_res.get("details"):
+    st.markdown("")
+    with st.container(border=True):
+        st.markdown(f"**⚠️ Severity Assessment** — `{severity}`")
+        st.markdown(severity_res.get("details", ""))
+        st.caption(f"Assessment method: {severity_res.get('assessment_method','—')}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -526,12 +538,15 @@ with st.expander("Was this prediction correct?", expanded=False):
 with st.expander("Pipeline Diagnostics", expanded=st.session_state.get("dev_mode", False)):
     if st.session_state.get("dev_mode"):
         st.info("🛠️ Developer Mode is ON. Showing detailed diagnostics.")
-    
-    engine = response.get("workflow_engine", "legacy_coordinator").replace("_", " ").title()
+
+    # Resolve diagnostics from grouped schema or legacy flat schema
+    _d = response.get("diagnostics") or response
+
+    engine = _d.get("workflow_engine", "legacy_coordinator").replace("_", " ").title()
     st.markdown(f"**Engine:** {engine}")
-    
+
     # 1. Pipeline Summary
-    summary = response.get("pipeline_summary", {})
+    summary = _d.get("pipeline_summary", {})
     if summary:
         dc1, dc2, dc3, dc4, dc5 = st.columns(5)
         dc1.metric("Overall", summary.get("overall_status", "—").title())
@@ -540,55 +555,53 @@ with st.expander("Pipeline Diagnostics", expanded=st.session_state.get("dev_mode
         dc4.metric("Failed", summary.get("failed_agents", 0))
         dc5.metric("Skipped", summary.get("skipped_agents", 0))
     else:
-        # Fallback for old responses
-        dc1, dc2, dc3 = st.columns(3)
-        dc1.metric("Time", f"{response.get('execution_time_ms', 0)} ms")
-        dc2.metric("Status", response.get("status", "—").title())
+        dc1, dc2 = st.columns(2)
+        dc1.metric("Time", f"{_d.get('execution_time_ms', 0)} ms")
+        dc2.metric("Status", _d.get("status", "—").title())
 
-    # 2. Warnings and ADK Fallbacks
-    warnings = response.get("warnings", [])
+    # 2. KB / AI availability summary
+    kb_available = knowledge_ctx is not None
+    ai_available = bool(advice_res)
+    st.markdown(
+        f"**Knowledge Base:** {'✅ Loaded' if kb_available else '⚠️ Unavailable'}  "
+        f"&nbsp;|&nbsp; **AI Advisory:** {'✅ Available' if ai_available else '⚠️ Unavailable'}"
+    )
+
+    # 3. Warnings and ADK Fallbacks
+    warnings = _d.get("warnings", [])
     if warnings:
         for w in warnings:
-            if "Switched to Legacy Coordinator" in w or "Fallback to Legacy Coordinator" in w:
+            if "Switched to Legacy Coordinator" in w or "Fallback" in w:
                 st.warning(f"⚠️ **Fallback Triggered:** {w}")
             elif "failed" in w.lower():
                 st.error(f"❌ {w}")
             else:
                 st.info(f"ℹ️ {w}")
 
-    # 3. Execution Summary Trace
-    exec_summary = response.get("execution_summary", [])
+    # 4. Execution Summary Trace
+    exec_summary = _d.get("execution_summary", [])
     if exec_summary:
         st.markdown("**Execution Trace:**")
         for agent_exec in exec_summary:
-            status = agent_exec.get("status", "unknown")
-            agent = agent_exec.get("agent", "UnknownAgent")
+            status  = agent_exec.get("status", "unknown")
+            agent   = agent_exec.get("agent", "UnknownAgent")
             time_ms = agent_exec.get("execution_time_ms", 0)
-            reason = agent_exec.get("reason", "")
-            
+            reason  = agent_exec.get("reason", "")
             if status == "success":
-                icon = "🟢"
-                desc = f"{icon} **{agent}** ({time_ms}ms)"
+                desc = f"🟢 **{agent}** ({time_ms}ms)"
             elif status == "timeout":
-                icon = "🟡"
-                desc = f"{icon} **{agent}** ({time_ms}ms)  \n_Timeout: {reason}_"
-            elif status == "warning" or status == "partial_success":
-                icon = "🟡"
-                desc = f"{icon} **{agent}** ({time_ms}ms)  \n_Warning: {reason}_"
+                desc = f"🟡 **{agent}** ({time_ms}ms)  \n_Timeout: {reason}_"
+            elif status in ("warning", "partial_success"):
+                desc = f"🟡 **{agent}** ({time_ms}ms)  \n_Warning: {reason}_"
             elif status == "failed":
-                icon = "🔴"
-                desc = f"{icon} **{agent}** ({time_ms}ms)  \n_Failed: {reason}_"
+                desc = f"🔴 **{agent}** ({time_ms}ms)  \n_Failed: {reason}_"
             elif status == "skipped":
-                icon = "⚪"
-                desc = f"{icon} **{agent}** ({time_ms}ms)  \n_Skipped: {reason}_"
+                desc = f"⚪ **{agent}** ({time_ms}ms)  \n_Skipped: {reason}_"
             else:
-                icon = "❓"
-                desc = f"{icon} **{agent}** ({time_ms}ms)  \n_Status: {status}_"
-                
+                desc = f"❓ **{agent}** ({time_ms}ms)  \n_Status: {status}_"
             st.markdown(desc)
     else:
-        # Fallback to old agent trace
-        trace = response.get("agent_trace", [])
+        trace = _d.get("agent_trace", [])
         if trace:
             st.markdown("**Agent Trace:**")
             st.markdown("  →  ".join([f"`{a}`" for a in trace]))

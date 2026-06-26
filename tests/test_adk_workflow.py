@@ -22,35 +22,47 @@ class TestADKCoordinatorAgent(unittest.TestCase):
         mock_disease.return_value = {"disease": "Tomato___Late_blight", "confidence": 95.0}
         mock_severity.return_value = {"severity": "High"}
         
+        class MockPart:
+            def __init__(self):
+                self.function_response = type('MockResponse', (object,), {
+                    'name': 'generate_advice_tool',
+                    'response': {"treatment": ["Test Treatment"]}
+                })()
+
+        class MockContent:
+            def __init__(self):
+                self.parts = [MockPart()]
+
         class MockEvent:
             def __init__(self):
-                self.content = None
-                self.output = '{"treatment": ["Test Treatment"]}'
+                self.content = MockContent()
                 
         mock_runner_run.return_value = [MockEvent()]
-
+ 
         result = self.agent.process_image("dummy.jpg")
-
-        self.assertEqual(result["status"], "success")
-        self.assertEqual(result["workflow_engine"], "google_adk")
-        self.assertEqual(result["agent_trace"], ["DiseaseAgent", "SeverityAgent", "AdvisoryAgent"])
+ 
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        self.assertEqual(result["diagnostics"]["workflow_engine"], "google_adk")
+        self.assertEqual(result["diagnostics"]["agent_trace"], ["DiseaseAgent", "SeverityAgent", "AdvisoryAgent"])
         self.assertEqual(result["prediction"]["disease"], "Tomato___Late_blight")
         
     @patch('os.getenv', return_value=None)
     @patch('agents.coordinator_agent.coordinator_agent.CoordinatorAgent.process_image')
     def test_fallback_due_to_missing_key(self, mock_legacy, mock_env):
         mock_legacy.return_value = {
-            "status": "success", 
-            "warnings": [], 
-            "workflow_engine": "legacy_coordinator",
-            "agent_trace": ["DiseaseDetectionAgent", "SeverityAgent", "AdvisoryAgent"]
+            "diagnostics": {
+                "status": "success", 
+                "warnings": ["ADK Workflow initialization failed (Missing GEMINI_API_KEY) -> Switched to Legacy Coordinator."], 
+                "workflow_engine": "legacy_coordinator",
+                "agent_trace": ["DiseaseDetectionAgent", "SeverityAgent", "AdvisoryAgent"]
+            }
         }
         
         result = self.agent.process_image("dummy.jpg")
         
         self.assertTrue(mock_legacy.called)
-        self.assertEqual(result["workflow_engine"], "legacy_coordinator")
-        self.assertIn("ADK Workflow initialization failed (Missing GEMINI_API_KEY)", result["warnings"][0])
+        self.assertEqual(result["diagnostics"]["workflow_engine"], "legacy_coordinator")
+        self.assertIn("ADK Workflow initialization failed (Missing GEMINI_API_KEY)", result["diagnostics"]["warnings"][0])
 
 if __name__ == "__main__":
     unittest.main()
