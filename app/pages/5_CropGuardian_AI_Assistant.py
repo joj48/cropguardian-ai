@@ -1,5 +1,9 @@
 import os
 import sys
+import json
+import datetime
+import streamlit as st
+from dotenv import load_dotenv
 
 # Ensure root and app directories are in sys.path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -9,29 +13,15 @@ app_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if app_dir not in sys.path:
     sys.path.insert(0, app_dir)
 
-import json
-import datetime
-import streamlit as st
-from dotenv import load_dotenv
-
 load_dotenv()
 
 # Imports from project
-from agents.advisory_agent.advisory_agent import AdvisoryAgent, GENAI_AVAILABLE
-from ui_components import inject_css, render_section_label
+from agents.advisory_agent.advisory_agent import AdvisoryAgent
+from ui import init_page, render_header, render_footer
 
-# Set page config
-st.set_page_config(
-    page_title="CropGuardian AI Assistant",
-    page_icon="🌿",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# Initialize Page (Page Config, Sidebar Navigation, Theme CSS)
+init_page(title="CropGuardian AI Assistant", icon="🌿")
 
-# Apply premium styling
-inject_css()
-
-# Cache the AdvisoryAgent initialization to reuse client connection
 @st.cache_resource
 def get_advisory_agent():
     return AdvisoryAgent()
@@ -39,69 +29,76 @@ def get_advisory_agent():
 # Guard: Ensure active diagnosis context exists
 if "chat_context" not in st.session_state or not st.session_state["chat_context"]:
     st.markdown("")
-    st.warning("🌿 No active diagnosis found. Please analyze a crop image first.")
+    st.warning("🌿 No active diagnosis found in the session. Please upload and analyze a crop image first.")
     if st.button("Go to Disease Detection", type="primary"):
         st.switch_page("pages/1_Disease_Detection.py")
+    render_footer()
     st.stop()
 
+# Retrieve active context
 context = st.session_state["chat_context"]
 crop = context.get("crop", "Unknown")
 disease = context.get("disease", "Unknown")
+if not crop or crop == "Unknown":
+    from app.utils.crop_utils import infer_crop_from_disease
+    crop = infer_crop_from_disease(disease)
+
+from src.utils.logger import get_logger
+logger = get_logger("chat_assistant", "chat_assistant.log")
+logger.debug(f"Chat context crop: {st.session_state['chat_context'].get('crop')}")
+
 disease_id = context.get("disease_id", "Unknown")
 severity = context.get("severity", "Unknown")
 weather = context.get("weather", {})
 kb_summary = context.get("knowledge_summary", {})
 
-# Initialize message history list and diagnostics timestamp
+# Initialize message history list
 if "chat_messages" not in st.session_state:
     st.session_state["chat_messages"] = []
-if "chat_created_at" not in st.session_state:
-    st.session_state["chat_created_at"] = datetime.datetime.now().isoformat()
 
-# Sidebar options
-st.sidebar.markdown("### ⚙️ Chat Settings")
+# Sidebar Chat Settings
+with st.sidebar:
+    st.markdown("**⚙️ Chat Settings**")
+    if "selected_model" not in st.session_state:
+        st.session_state["selected_model"] = "gemini-2.5-flash"
 
-# Model selector
-if "selected_model" not in st.session_state:
-    st.session_state["selected_model"] = "gemini-2.5-flash"
+    model_options = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash"]
+    selected_model = st.sidebar.selectbox(
+        "Select AI Model",
+        model_options,
+        index=model_options.index(st.session_state["selected_model"])
+    )
+    st.session_state["selected_model"] = selected_model
 
-model_options = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash"]
-selected_model = st.sidebar.selectbox(
-    "Select AI Model",
-    model_options,
-    index=model_options.index(st.session_state["selected_model"])
-)
-st.session_state["selected_model"] = selected_model
+    # Quick action button: Reset chat
+    if st.sidebar.button("🗑️ Clear Chat History", use_container_width=True):
+        st.session_state["chat_messages"] = []
+        st.toast("🗑️ Chat history cleared!")
+        st.rerun()
 
-# Quick action button: Reset chat
-if st.sidebar.button("🗑️ Clear Chat History"):
-    st.session_state["chat_messages"] = []
-    st.rerun()
+    st.divider()
+    st.markdown(
+        "💬 **Context Awareness:** The chatbot automatically knows your crop "
+        "type, weather conditions, severity score, and treatment options from the "
+        "active diagnosis."
+    )
 
-st.sidebar.divider()
-st.sidebar.markdown(
-    "💬 **CropGuardian AI** is context-aware. It automatically knows your crop "
-    "type, weather conditions, severity score, and treatment options from the "
-    "active diagnosis."
-)
+# Page Header
+render_header("💬 CropGuardian Assistant", "Ask follow-up questions about disease recovery, chemical dosages, organic remedies, or weather-aware spraying.")
 
-# Main page layout
-st.title("🌿 CropGuardian AI Assistant")
-st.markdown("Ask follow-up questions about disease recovery, chemical dosages, organic alternatives, or prevention steps.")
-
-# Display Active Diagnosis Summary Card
-st.markdown("### 🌿 Current Diagnosis")
+# ─── Current Diagnosis Summary Card ───────────────────────────────────────────
+st.markdown("<div class='cg-section-label'>Active Diagnosis Context</div>", unsafe_allow_html=True)
 model_display_names = {
     "gemini-2.5-flash": "Gemini 2.5 Flash",
     "gemini-2.5-pro": "Gemini 2.5 Pro",
     "gemini-1.5-flash": "Gemini 1.5 Flash"
 }
+
 with st.container(border=True):
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         st.markdown(f"**Crop**  \n`{crop}`")
     with col2:
-        # Format disease name to look nicer
         formatted_disease = disease.replace("_", " ").title()
         st.markdown(f"**Disease**  \n`{formatted_disease}`")
     with col3:
@@ -118,7 +115,7 @@ with st.container(border=True):
 
 st.divider()
 
-# Render chat history
+# ─── Chat History ─────────────────────────────────────────────────────────────
 for message in st.session_state["chat_messages"]:
     role = message["role"]
     avatar = "🤖" if role == "model" else "🧑‍🌾"
@@ -148,8 +145,8 @@ Farmer Advisory Guidelines:
 5. Answer follow-up questions directly using this context. Do not offer advice unrelated to agriculture or this crop/disease context unless asked to compare with similar crop issues.
 """
 
-# User Input
-if prompt := st.chat_input("Ask about organic remedies, spray timing, fertilizer doses..."):
+# ─── Chat Input ───────────────────────────────────────────────────────────────
+if prompt := st.chat_input("Ask about crop diseases, treatments, or weather risks..."):
     # Display user input bubble
     with st.chat_message("user", avatar="🧑‍🌾"):
         st.markdown(prompt)
@@ -168,12 +165,10 @@ if prompt := st.chat_input("Ask about organic remedies, spray timing, fertilizer
 
     # Formulate contents array (sliding window: last 10 messages)
     contents = []
-    # Grab the last 10 messages from history (excluding the one we just added, which will be appended as the current query)
     recent_messages = st.session_state["chat_messages"][-10:]
     
     for msg in recent_messages:
         role = "user" if msg["role"] == "user" else "model"
-        # google-genai SDK types.Content structure
         try:
             from google.genai import types
             contents.append(
@@ -183,13 +178,12 @@ if prompt := st.chat_input("Ask about organic remedies, spray timing, fertilizer
                 )
             )
         except ImportError:
-            # Fallback format if types is not directly importable
             contents.append({
                 "role": role,
                 "parts": [{"text": msg["content"]}]
             })
 
-    # Query Gemini model with spinner
+    # Query Gemini model
     with st.spinner("CropGuardian AI is thinking..."):
         try:
             from google.genai import types
@@ -208,10 +202,10 @@ if prompt := st.chat_input("Ask about organic remedies, spray timing, fertilizer
             
             # Save assistant message to history
             st.session_state["chat_messages"].append({"role": "model", "content": assistant_response})
-            
-            # Rerun to update chat screen
             st.rerun()
 
         except Exception as e:
             st.error(f"⚠️ CropGuardian AI encountered an error: {e}")
             st.info("Your message and chat history have been preserved. You can try sending your question again.")
+
+render_footer()

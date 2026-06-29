@@ -255,7 +255,9 @@ agricare/
 │   └── weather_agent/          # Weather API integrations
 ├── app/                        # Streamlit Web Application
 │   ├── main.py                 # App entry point & startup validation
-│   └── pages/                  # Streamlit UI pages
+│   ├── pages/                  # Streamlit UI pages
+│   ├── ui/                     # Modular design components (styles, headers, sidebars, cards)
+│   └── utils/                  # Shared business utilities (crop inference, normalization)
 ├── data/                       # Local data storage (history, feedback, retraining)
 ├── diagrams/                   # Architecture diagrams
 ├── knowledge_base/             # JSON schemas and validated disease data
@@ -418,6 +420,17 @@ agricare/
 * **Purpose**: Runs model evaluation metrics on test datasets.
 * **Description**: Classifies images in directory paths, computes metrics, and generates a model health report.
 * **Imports**: Scikit-Learn.
+
+## 4.22. File: `app/utils/crop_utils.py`
+* **Purpose**: Shared business utility for crop name inference and normalization.
+* **Description**: Extracts and normalizes crop names from raw identifiers (e.g. `Tomato___Late_blight` -> `Tomato`, `Pepper,_bell___Bacterial_spot` -> `Pepper Bell`) and formatted strings. Used as a single source of truth across coordinators and UI pages.
+* **Imports**: None.
+* **Used By**: `CoordinatorAgent`, `ADKCoordinatorAgent`, `1_Disease_Detection.py`, `5_CropGuardian_AI_Assistant.py`.
+
+## 4.23. Directory: `app/ui/`
+* **Purpose**: Modular presentation components package.
+* **Description**: Contains UI modules (styles, headers, sidebar, cards, advisory tabs, system health telemetry) to decouple backend coordinator logic from presentation aesthetics.
+* **Imports**: Streamlit, platform, psutil.
 
 ---
 

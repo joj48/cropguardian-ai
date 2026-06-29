@@ -111,6 +111,14 @@ class CoordinatorAgent:
                 logger.warning(f"KB lookup failed for '{disease_class}': {e}")
                 _diag["warnings"].append(f"Knowledge Base lookup failed: {e}")
 
+        # Resolve crop name
+        from app.utils.crop_utils import infer_crop_from_disease
+        crop_val = getattr(knowledge_record, "crop", None) if knowledge_record else None
+        if not crop_val:
+            crop_val = infer_crop_from_disease(disease_class)
+        prediction["crop"] = crop_val or "Unknown"
+        logger.debug(f"Prediction crop resolved: {prediction['crop']}")
+
         # ─── Step 3: Weather Retrieval ─────────────────────────────────────────
         t0 = time.time()
         if location_input or (lat and lon):
