@@ -2,9 +2,39 @@
 venv/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+instance/
 
-# IDE
+# React / Node.js
+node_modules/
+build/
+dist/
+.eslintcache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp/
+.pnp.js
+
+# IDEs & Editors
 .vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# OS Files
+.DS_Store
+Thumbs.db
 
 # Environment
 .env
@@ -20,6 +50,7 @@ temp/*
 
 # Runtime logs
 logs/
+*.log
 
 # Runtime generated data
 data/feedback/
